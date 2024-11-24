@@ -1,0 +1,170 @@
+.org $0000
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Testprogram for I2C Driver with PCF8563 RealTime Clock
+;	For 1802 CPU - RCA 2020 SBC with PCA9564 Controller
+;	Version: 0.1
+;	Date: Nov 17, 2024
+;	Author: Richard van Harderwijk
+;
+;	Uses UT4 and I2C driver routines
+;	Doc: https://github.com/richardvanharderwijk/1802-I2C-interface-for-RCA2020 
+;
+;	Uses SCRT 
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+begin_tst:
+
+; enter here at $0000 with X, P = 0, 0 via UT4 (int disabled) 
+
+init:
+LDI 0x7F			; init stack in R2
+PLO 2
+LDI 0xFE
+PHI 2
+SEX 2
+;
+LDI 0x00			; init PC in R3
+PHI 3
+LDI 0x0E			
+PLO 3
+SEP 3
+;
+LDI 0xC3			; init SCRT call in R4, return in R5
+PHI 4
+PHI 5
+LDI 0x01
+PLO 4
+LDI 0x11
+PLO 5
+;
+
+run_tst:
+LDI 0x00			; init pointer to text to print
+PHI 9		   
+LDI 0x82
+PLO 9
+;
+print1:
+LDA 9               ; get byte to print and put in R(F).1
+PHI F
+BZ cont1            ; exit if byte = 0x00 (EOF)
+SEP 4
+dw 0xC2A4           ; SCRT to UT4: TYPE @ 0xC2A4
+BR print1
+cont1:
+;
+; initialization routine of I2C controller
+SEP 4               ; SCRT to I2C controller init
+dw 0x7200
+
+; send initialization string to 8563 RTC
+LDI 0x00			; init pointer to bytes to send
+PHI 8		    	; CHECK <<<<<<<
+LDI 0xF5
+PLO 8
+;
+LDI 0x51            ; peripheral/RTC address (0xA2 write)
+PHI 7
+LDI 0x11            ; 17 bytes string for RTC registers
+PLO 7
+;
+SEP 4               ; SCRT to I2C transmitter routine
+dw 0x7000
+;
+GHI 7               ; print return values
+PHI F
+SEP 4
+dw 0xC2AE
+GLO 7
+PHI F
+SEP 4
+dw 0xC2AE
+; 8563 RTC initialization ready
+;
+
+LDI 0x00			; init pointer to text to print
+PHI 9		        ; print delay message
+LDI 0xBE
+PLO 9
+;
+print2:
+LDA 9               ; get byte to print and put in R(F).1
+PHI F
+BZ cont2            ; exit if byte = 0x00 (EOF)
+SEP 4
+dw 0xC2A4           ; SCRT to UT4: TYPE @ 0xC2A4
+BR print2
+cont2:
+;
+LDI 0xFF            ; delay
+PHI 9
+delay2:
+DEC 9
+NOP
+NOP
+NOP
+NOP
+GHI 9
+BNZ delay2
+;
+
+LDI 0x51            ; peripheral/RTC address (0xA3 read)
+PHI 7
+LDI 0x11            ; 17 bytes string for RTC registers to read
+PLO 7
+;
+                    ; R(8) already points after init (sent) string for read
+SEP 4               ; SCRT to I2C receiver routine
+dw 0x7100
+;
+GHI 7               ; print return values
+PHI F
+SEP 4
+dw 0xC2AE
+GLO 7
+PHI F
+SEP 4
+dw 0xC2AE
+; 8563 RTC read registers after delay ready
+;
+LDI 0x00			; init pointer to text to print
+PHI 9		   
+LDI 0xD9
+PLO 9
+;
+print3:
+LDA 9               ; get byte to print and put in R(F).1
+PHI F
+BZ cont3            ; exit if byte = 0x00 (EOF)
+SEP 4
+dw 0xC2A4           ; SCRT to UT4: TYPE @ 0xC2A4
+BR print3
+cont3:
+;
+
+
+end_tst:
+LBR 0xC100	    	; Jump to UT4 to examine return string in memory
+;
+;
+
+
+begin_txt:
+db  0x0D, 0x0A, "Start I2C test PCF8563 Real time clock", 0x0D, 0x0A, "TX return value: ", 0x00
+
+delay_txt:
+db 0x0D, 0x0A,  "Delay", 0x0D, 0x0A, "RX return value: ", 0x00
+
+end_txt:
+db 0x0D, 0x0A,  "End test. Press return.", 0x0D, 0x0A, 0x00
+
+init_clock_string:
+db 0x00, 0x00, 0x00, 0x58, 0x59, 0x23, 0x31, 0x00, 0x12, 0x23, 0x80, 0x80, 0x80, 0x80, 0x00, 0x03, 0xFF
+
+
+

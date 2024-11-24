@@ -1,0 +1,174 @@
+0000                          .ORG   $0000   
+0000                             ; 
+0000                             ; 
+0000                             ;	Testprogram for I2C Driver with PCF8563 RealTime Clock
+0000                             ;	For 1802 CPU - RCA 2020 SBC with PCA9564 Controller
+0000                             ;	Version: 0.1
+0000                             ;	Date: Nov 17, 2024
+0000                             ;	Author: Richard van Harderwijk
+0000                             ; 
+0000                             ;	Uses UT4 and I2C driver routines
+0000                             ;	Doc: https://github.com/richardvanharderwijk/1802-I2C-interface-for-RCA2020
+0000                             ; 
+0000                             ;	Uses SCRT
+0000                             ; 
+0000                             ; 
+0000                BEGIN_TST:      
+0000                             ; enter here at $0000 with X, P = 0, 0 via UT4 (int disabled)
+0000                INIT:        
+0000   F8 7F                  LDI   0x7F   	; init stack in R2
+0002   A2                     PLO   2   
+0003   F8 FE                  LDI   0xFE   
+0005   B2                     PHI   2   
+0006   E2                     SEX   2   
+0007                             ; 
+0007   F8 00                  LDI   0x00   	; init PC in R3
+0009   B3                     PHI   3   
+000A   F8 0E                  LDI   0x0E   
+000C   A3                     PLO   3   
+000D   D3                     SEP   3   
+000E                             ; 
+000E   F8 C3                  LDI   0xC3   	; init SCRT call in R4, return in R5
+0010   B4                     PHI   4   
+0011   B5                     PHI   5   
+0012   F8 01                  LDI   0x01   
+0014   A4                     PLO   4   
+0015   F8 11                  LDI   0x11   
+0017   A5                     PLO   5   
+0018                             ; 
+0018                RUN_TST:      
+0018   F8 00                  LDI   0x00   	; init pointer to text to print
+001A   B9                     PHI   9   
+001B   F8 82                  LDI   0x82   
+001D   A9                     PLO   9   
+001E                             ; 
+001E                PRINT1:      
+001E   49                     LDA   9   	; get byte to print and put in R(F).1
+001F   BF                     PHI   F   
+0020   32 27                  BZ   cont1   	; exit if byte = 0x00 (EOF)
+0022   D4                     SEP   4   
+0023   C2 A4                  DW   0xC2A4   	; SCRT to UT4: TYPE @ 0xC2A4
+0025   30 1E                  BR   print1   
+0027                CONT1:       
+0027                             		; 
+0027                             		; initialization routine of I2C controller
+0027   D4                     SEP   4   	; SCRT to I2C controller init
+0028   72 00                  DW   0x7200   
+002A                             		; send initialization string to 8563 RTC
+002A   F8 00                  LDI   0x00   	; init pointer to bytes to send
+002C   B8                     PHI   8   	; CHECK <<<<<<<
+002D   F8 F5                  LDI   0xF5   
+002F   A8                     PLO   8   
+0030                             ; 
+0030   F8 51                  LDI   0x51   	; peripheral/RTC address (0xA2 write)
+0032   B7                     PHI   7   
+0033   F8 11                  LDI   0x11   	; 17 bytes string for RTC registers
+0035   A7                     PLO   7   
+0036                             ; 
+0036   D4                     SEP   4   	; SCRT to I2C transmitter routine
+0037   70 00                  DW   0x7000   
+0039                             ; 
+0039   97                     GHI   7   	; print return values
+003A   BF                     PHI   F   
+003B   D4                     SEP   4   
+003C   C2 AE                  DW   0xC2AE   
+003E   87                     GLO   7   
+003F   BF                     PHI   F   
+0040   D4                     SEP   4   
+0041   C2 AE                  DW   0xC2AE   
+0043                             		; 8563 RTC initialization ready
+0043                             		; 
+0043   F8 00                  LDI   0x00   	; init pointer to text to print
+0045   B9                     PHI   9   	; print delay message
+0046   F8 BE                  LDI   0xBE   
+0048   A9                     PLO   9   
+0049                             ; 
+0049                PRINT2:      
+0049   49                     LDA   9   	; get byte to print and put in R(F).1
+004A   BF                     PHI   F   
+004B   32 52                  BZ   cont2   	; exit if byte = 0x00 (EOF)
+004D   D4                     SEP   4   
+004E   C2 A4                  DW   0xC2A4   	; SCRT to UT4: TYPE @ 0xC2A4
+0050   30 49                  BR   print2   
+0052                CONT2:       
+0052                             		; 
+0052   F8 FF                  LDI   0xFF   	; delay
+0054   B9                     PHI   9   
+0055                DELAY2:      
+0055   29                     DEC   9   
+0056   C4                     NOP      
+0057   C4                     NOP      
+0058   C4                     NOP      
+0059   C4                     NOP      
+005A   99                     GHI   9   
+005B   3A 55                  BNZ   delay2   
+005D                             		; 
+005D   F8 51                  LDI   0x51   	; peripheral/RTC address (0xA3 read)
+005F   B7                     PHI   7   
+0060   F8 11                  LDI   0x11   	; 17 bytes string for RTC registers to read
+0062   A7                     PLO   7   
+0063                             		; 
+0063                             		; R(8) already points after init (sent) string for read
+0063   D4                     SEP   4   	; SCRT to I2C receiver routine
+0064   71 00                  DW   0x7100   
+0066                             		; 
+0066   97                     GHI   7   	; print return values
+0067   BF                     PHI   F   
+0068   D4                     SEP   4   
+0069   C2 AE                  DW   0xC2AE   
+006B   87                     GLO   7   
+006C   BF                     PHI   F   
+006D   D4                     SEP   4   
+006E   C2 AE                  DW   0xC2AE   
+0070                             		; 8563 RTC read registers after delay ready
+0070                             		; 
+0070   F8 00                  LDI   0x00   	; init pointer to text to print
+0072   B9                     PHI   9   
+0073   F8 D9                  LDI   0xD9   
+0075   A9                     PLO   9   
+0076                             		; 
+0076                PRINT3:      
+0076   49                     LDA   9   	; get byte to print and put in R(F).1
+0077   BF                     PHI   F   
+0078   32 7F                  BZ   cont3   	; exit if byte = 0x00 (EOF)
+007A   D4                     SEP   4   
+007B   C2 A4                  DW   0xC2A4   	; SCRT to UT4: TYPE @ 0xC2A4
+007D   30 76                  BR   print3   
+007F                CONT3:       
+007F                             		; 
+007F                END_TST:      
+007F   C0 C1 00               LBR   0xC100   	; Jump to UT4 to examine return string in memory
+0082                             		; 
+0082                             		; 
+0082                BEGIN_TXT:      
+0082   0D 0A 53 74 61 72 74 20 49 32 43 20 74 65 73 74 20 50 43 46 38 35 36 33 20 52 65 61 6C 20 74 69 6D 65 20 63 6C 6F 63 6B 0D 0A 54 58 20 72 65 74 75 72 6E 20 76 61 6C 75 65 3A 20 00 DB   0x0D,0x0A,"Start I2C test PCF8563 Real time clock",0x0D,0x0A,"TX return value: ",0x00   
+00BE                DELAY_TXT:      
+00BE   0D 0A 44 65 6C 61 79 0D 0A 52 58 20 72 65 74 75 72 6E 20 76 61 6C 75 65 3A 20 00 DB   0x0D,0x0A,"Delay",0x0D,0x0A,"RX return value: ",0x00   
+00D9                END_TXT:      
+00D9   0D 0A 45 6E 64 20 74 65 73 74 2E 20 50 72 65 73 73 20 72 65 74 75 72 6E 2E 0D 0A 00 DB   0x0D,0x0A,"End test. Press return.",0x0D,0x0A,0x00   
+00F5                INIT_CLOCK_STRING:      
+00F5   00 00 00 58 59 23 31 00 12 23 80 80 80 80 00 03 FF DB   0x00,0x00,0x00,0x58,0x59,0x23,0x31,0x00,0x12,0x23,0x80,0x80,0x80,0x80,0x00,0x03,0xFF   
+
+
+BEGIN_TST:          0000 DEFINED AT LINE 20
+INIT:               0000 DEFINED AT LINE 24
+RUN_TST:            0018 DEFINED AT LINE 46
+PRINT1:             001E DEFINED AT LINE 52
+                    > USED AT LINE 58
+CONT1:              0027 DEFINED AT LINE 59
+                    > USED AT LINE 55
+PRINT2:             0049 DEFINED AT LINE 95
+                    > USED AT LINE 101
+CONT2:              0052 DEFINED AT LINE 102
+                    > USED AT LINE 98
+DELAY2:             0055 DEFINED AT LINE 106
+                    > USED AT LINE 113
+PRINT3:             0076 DEFINED AT LINE 140
+                    > USED AT LINE 146
+CONT3:              007F DEFINED AT LINE 147
+                    > USED AT LINE 143
+END_TST:            007F DEFINED AT LINE 151
+BEGIN_TXT:          0082 DEFINED AT LINE 157
+DELAY_TXT:          00BE DEFINED AT LINE 160
+END_TXT:            00D9 DEFINED AT LINE 163
+INIT_CLOCK_STRING:  00F5 DEFINED AT LINE 166
