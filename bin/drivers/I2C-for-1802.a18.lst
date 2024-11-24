@@ -1,0 +1,365 @@
+0000                             ; 
+0000                             ; 
+0000                             ;	Driver: I2C Controller Transmitter mode
+0000                             ;	For 1802 CPU - RCA 2020 SBC with PCA9564 Controller
+0000                             ;	Version: 0.1
+0000                             ;	Date: Oct 31, 2024
+0000                             ;	Author: Richard van Harderwijk
+0000                             ; 
+0000                             ;	PCA9564 connected via INP/OUT 4..7
+0000                             ;	Doc: https://github.com/richardvanharderwijk/1802-I2C-interface-for-RCA2020
+0000                             ;	Doc: AN10148 application note, figure 6a
+0000                             ; 
+0000                             ;	Pre: R(8) is pointer to string of bytes to send; R(7).1 is peripheral address; R(7).0 is #bytes to send
+0000                             ;	Post on success: R(7).1 and R(7).0 contain 0x00
+0000                             ;	Post on error: R(7).1 is Expected I2CSTA value; R(7).0 is Actual I2CSTA returned value
+0000                             ;	End with SCRT return D5
+0000                             ; 
+0000                             ; 
+7000                          .ORG   $7000   
+7000                BEGIN_TX:      
+7000   87                     GLO   7   	; test on #bytes to send > 0
+7001   3A 09                  BNZ   start_tx   
+7003   F8 01                  LDI   0x01   
+7005   A7                     PLO   7   
+7006   B7                     PHI   7   
+7007   30 74                  BR   end_tx   	; exit w/ error
+7009                START_TX:      
+7009   F8 E4                  LDI   0xE4   	; generate I2C start command
+700B   73                     STXD      
+700C   73                     STXD      
+700D   60                     IRX      
+700E   67                     OUT   7   	; I2CCON register
+700F                CHK_SI_1:      		; wait for SI = 1
+700F   6F                     INP   7   
+7010   FA 08                  ANI   0x08   
+7012   32 0F                  BZ   chk_SI_1   
+7014   6C                     INP   4   	; I2CSTA register, check
+7015   FB 08                  XRI   0x08   
+7017   32 20                  BZ   continue1   	; ok, continue
+7019   F0                     LDX      
+701A   A7                     PLO   7   
+701B   F8 08                  LDI   0x08   
+701D   B7                     PHI   7   
+701E   30 74                  BR   end_tx   	; exit w/ error
+7020                CONTINUE1:      
+7020   97                     GHI   7   	; peripheral address to I2CDAT
+7021   FE                     SHL      		; Shift Left, address in MSB bits [7..1]
+7022   FA FE                  ANI   0xFE   	; R/W bit = 0 [LSB]
+7024   73                     STXD      
+7025   73                     STXD      
+7026   60                     IRX      
+7027   65                     OUT   5   	; I2CDAT register
+7028   F8 C4                  LDI   0xC4   	; I2C send peripheral address + write command
+702A   73                     STXD      
+702B   73                     STXD      
+702C   60                     IRX      
+702D   67                     OUT   7   
+702E                CHK_SI_2:      		; wait for SI=1
+702E   6F                     INP   7   
+702F   FA 08                  ANI   0x08   
+7031   32 2E                  BZ   chk_SI_2   
+7033   6C                     INP   4   	; I2CSTA register, check
+7034   FB 18                  XRI   0x18   
+7036   32 3F                  BZ   continue2   
+7038   F0                     LDX      
+7039   A7                     PLO   7   
+703A   F8 18                  LDI   0x18   
+703C   B7                     PHI   7   
+703D   30 74                  BR   end_tx   	; exit w/ error
+703F                CONTINUE2:      		; loop for byte string to send
+703F   48                     LDA   8   	; load data to I2CDAT
+7040   73                     STXD      
+7041   73                     STXD      
+7042   60                     IRX      
+7043   65                     OUT   5   
+7044   F8 C4                  LDI   0xC4   	; send data command
+7046   73                     STXD      
+7047   73                     STXD      
+7048   60                     IRX      
+7049   67                     OUT   7   
+704A                CHK_SI_3:      		; wait for SI = 1, poll for transmission finished
+704A   6F                     INP   7   
+704B   FA 08                  ANI   0x08   
+704D   32 4A                  BZ   chk_SI_3   
+704F   6C                     INP   4   	; I2CSTA register, check
+7050   FB 28                  XRI   0x28   
+7052   32 5B                  BZ   continue3   
+7054   F0                     LDX      
+7055   A7                     PLO   7   
+7056   F8 28                  LDI   0x28   
+7058   B7                     PHI   7   
+7059   30 74                  BR   end_tx   	; exit w/ error
+705B                CONTINUE3:      
+705B   27                     DEC   7   	; more bytes to send?
+705C   87                     GLO   7   
+705D   3A 3F                  BNZ   continue2   
+705F   F8 D4                  LDI   0xD4   	; generate stop command
+7061   73                     STXD      
+7062   73                     STXD      
+7063   60                     IRX      
+7064   67                     OUT   7   
+7065   6F                     INP   7   	; I2CCON register, check STO bit = 0
+7066   FA 10                  ANI   0x10   
+7068   32 70                  BZ   continue4   
+706A   F8 02                  LDI   0x02   
+706C   A7                     PLO   7   
+706D   B7                     PHI   7   
+706E   30 74                  BR   end_tx   	; exit w/ error
+7070                CONTINUE4:      
+7070   F8 00                  LDI   0x00   	; exit w/ success :-)
+7072   A7                     PLO   7   
+7073   B7                     PHI   7   
+7074                END_TX:      
+7074   D5                     SEP   5   
+7075                             ; 
+7075                             ; 
+7075                             ;	Driver: I2C Controller Receiver mode
+7075                             ;	For 1802 CPU - RCA 2020 SBC with PCA9564 Controller
+7075                             ;	Version: 0.1
+7075                             ;	Date: Oct 31, 2024
+7075                             ;	Author: Richard van Harderwijk
+7075                             ; 
+7075                             ;	PCA9564 connected via INP/OUT 4..7
+7075                             ;	Doc: https://github.com/richardvanharderwijk/1802-I2C-interface-for-RCA2020
+7075                             ;	Doc: AN10148 application note, figure 7a
+7075                             ; 
+7075                             ;	Pre: R(8) is pointer to memory allocated to store bytes received;
+7075                             ;	Pre: R(7).1 is peripheral address; R(7).0 is #bytes to receive
+7075                             ;	Post on success: R(7).1 and R(7).0 contain 0x00
+7075                             ;	Post on error: R(7).1 is Expected I2CSTA value; R(7).0 is Actual I2CSTA returned value
+7075                             ;	End with SCRT return D5
+7075                             ; 
+7075                             ; 
+7100                          .ORG   $7100   
+7100                BEGIN_RX:      
+7100   87                     GLO   7   	; test on #bytes to receive > 0
+7101   3A 09                  BNZ   start_rx   
+7103   F8 01                  LDI   0x01   
+7105   A7                     PLO   7   
+7106   B7                     PHI   7   
+7107   30 90                  BR   end_rx   	; exit w/ error
+7109                START_RX:      
+7109   F8 E4                  LDI   0xE4   	; generate I2C start command
+710B   73                     STXD      
+710C   73                     STXD      
+710D   60                     IRX      
+710E   67                     OUT   7   	; I2CCON register
+710F                CHK_SI_4:      		; wait for SI = 1
+710F   6F                     INP   7   
+7110   FA 08                  ANI   0x08   
+7112   32 0F                  BZ   chk_SI_4   
+7114   6C                     INP   4   	; I2CSTA register, check
+7115   FB 08                  XRI   0x08   
+7117   32 20                  BZ   continue5   	; ok, continue
+7119   F0                     LDX      
+711A   A7                     PLO   7   
+711B   F8 08                  LDI   0x08   
+711D   B7                     PHI   7   
+711E   30 90                  BR   end_rx   	; exit w/ error
+7120                CONTINUE5:      
+7120   97                     GHI   7   	; peripheral address to I2CDAT
+7121   FE                     SHL      		; Shift Left, address in MSB bits [7..1]
+7122   F9 01                  ORI   0x01   	; R/W bit = 1 [LSB]
+7124   73                     STXD      
+7125   73                     STXD      
+7126   60                     IRX      
+7127   65                     OUT   5   	; I2CDAT register
+7128   F8 C4                  LDI   0xC4   	; I2C send peripheral address + write command
+712A   73                     STXD      
+712B   73                     STXD      
+712C   60                     IRX      
+712D   67                     OUT   7   
+712E                CHK_SI_5:      		; wait for SI=1
+712E   6F                     INP   7   
+712F   FA 08                  ANI   0x08   
+7131   32 2E                  BZ   chk_SI_5   
+7133   6C                     INP   4   	; I2CSTA register, check
+7134   FB 40                  XRI   0x40   
+7136   32 3F                  BZ   continue6   
+7138   F0                     LDX      
+7139   A7                     PLO   7   
+713A   F8 40                  LDI   0x40   
+713C   B7                     PHI   7   
+713D   30 90                  BR   end_rx   	; exit w/ error
+713F                CONTINUE6:      
+713F   27                     DEC   7   	; last byte of receive is not acknowledged
+7140   87                     GLO   7   	; if only one byte to read, skip read loop
+7141   32 61                  BZ   read_last_byte   
+7143                CONTINUE7:      		; loop read all but last byte
+7143   F8 C4                  LDI   0xC4   	; read data command
+7145   73                     STXD      
+7146   73                     STXD      
+7147   60                     IRX      
+7148   67                     OUT   7   
+7149                CHK_SI_6:      		; wait for SI = 1, poll for transmission finished
+7149   6F                     INP   7   
+714A   FA 08                  ANI   0x08   
+714C   32 49                  BZ   chk_SI_6   
+714E   6C                     INP   4  	 	; I2CSTA register, check
+714F   FB 50                  XRI   0x50   
+7151   32 5A                  BZ   continue8   
+7153   F0                     LDX      
+7154   A7                     PLO   7   
+7155   F8 50                  LDI   0x50   
+7157   B7                     PHI   7   
+7158   30 90                  BR   end_rx   	; exit w/ error
+715A                CONTINUE8:      
+715A   6D                     INP   5   	; read data from I2C bus from I2CDAT
+715B   58                     STR   8   	; store received I2C data via R(8) pointer
+715C   18                     INC   8   
+715D   27                     DEC   7   	; more bytes to receive?
+715E   87                     GLO   7   
+715F   3A 43                  BNZ   continue7   
+7161                READ_LAST_BYTE:      
+7161   F8 44                  LDI   0x44   	; read data command
+7163   73                     STXD      	; to read last byte, not acknowledged
+7164   73                     STXD      
+7165   60                     IRX      
+7166   67                     OUT   7   
+7167                CHK_SI_7:      		; wait for SI = 1, poll for transmission finished
+7167   6F                     INP   7   
+7168   FA 08                  ANI   0x08   
+716A   32 67                  BZ   chk_SI_7   
+716C   6C                     INP   4   	; I2CSTA register, check
+716D   FB 58                  XRI   0x58   
+716F   32 78                  BZ   continue9   
+7171   F0                     LDX      
+7172   A7                     PLO   7   
+7173   F8 58                  LDI   0x58   
+7175   B7                     PHI   7   
+7176   30 90                  BR   end_rx   	; exit w/ error
+7178                CONTINUE9:      
+7178   6D                     INP   5   	; read last byte from I2C bus from I2CDAT
+7179   58                     STR   8   	; store received I2C data via R(8) pointer
+717A   18                     INC   8   
+717B   F8 D4                  LDI   0xD4   	; generate stop command
+717D   73                     STXD      
+717E   73                     STXD      
+717F   60                     IRX      
+7180   67                     OUT   7   
+7181   6F                     INP   7   	; I2CCON register, check STO bit
+7182   FA 10                  ANI   0x10   
+7184   32 8C                  BZ   continue10   
+7186   F8 02                  LDI   0x02   
+7188   A7                     PLO   7   
+7189   B7                     PHI   7   
+718A   30 90                  BR   end_rx   	; exit w/ error
+718C                CONTINUE10:      
+718C   F8 00                  LDI   0x00   	; exit w/ success :-)
+718E   A7                     PLO   7   
+718F   B7                     PHI   7   
+7190                END_RX:      
+7190   D5                     SEP   5   
+7191                             ; 
+7191                             ; 
+7191                             ;	Driver: I2C Controller Initialization Sequence
+7191                             ;	For 1802 CPU - RCA 2020 SBC with PCA9564 Controller
+7191                             ;	Version: 0.1
+7191                             ;	Date: Oct 31, 2024
+7191                             ;	Author: Richard van Harderwijk
+7191                             ; 
+7191                             ;	PCA9564 connected via INP/OUT 4..7
+7191                             ;	Doc: https://github.com/richardvanharderwijk/1802-I2C-interface-for-RCA2020
+7191                             ;	Doc: AN10148 application note, figure 5
+7191                             ; 
+7191                             ;	Pre: R(7).1 future use (own peripheral address); R(7).0 future use (clock frequency)
+7191                             ;	In this version clock frequency is set at 88 kHz
+7191                             ;	Post on success: R(7).1 and R(7).0 contain 0x00
+7191                             ;	Post on error: future use, in this version no test
+7191                             ;	End with SCRT return D5
+7191                             ; 
+7191                             ; 
+7200                          .ORG   $7200   
+7200                BEGIN_INIT:      
+7200   F8 FF                  LDI   0xFF   	; 0xFF in TimeOut register
+7202   73                     STXD      
+7203   73                     STXD      
+7204   60                     IRX      
+7205   64                     OUT   4   	; I2CTO register
+7206   F8 64                  LDI   0x64   	; own peripheral address
+7208   73                     STXD      
+7209   73                     STXD      
+720A   60                     IRX      
+720B   66                     OUT   6   	; I2CADR register
+720C   F8 44                  LDI   0x44   	; Enable Serial IO, 88 kHz
+720E   73                     STXD      
+720F   73                     STXD      
+7210   60                     IRX      
+7211   67                     OUT   7   	; I2CCON register
+7212   F8 2F                  LDI   0x2F   	; wait for oscillator startup
+7214                DELAY1:      
+7214   FF 01                  SMI   0x01   
+7216   3A 14                  BNZ   delay1   
+7218   F8 C4                  LDI   0xC4   	; peripheral receiver mode
+721A   73                     STXD      
+721B   73                     STXD      
+721C   60                     IRX      
+721D   67                     OUT   7   	; I2CCON register
+721E   F8 00                  LDI   0x00   	; exit always w/ success :-)
+7220   A7                     PLO   7   
+7221   B7                     PHI   7   
+7222                END_INIT:      
+7222   D5                     SEP   5   
+
+
+BEGIN_TX:           7000 DEFINED AT LINE 31
+START_TX:           7009 DEFINED AT LINE 40
+                    > USED AT LINE 34
+CHK_SI_1:           700F DEFINED AT LINE 47
+                    > USED AT LINE 50
+CONTINUE1:          7020 DEFINED AT LINE 61
+                    > USED AT LINE 54
+CHK_SI_2:           702E DEFINED AT LINE 75
+                    > USED AT LINE 78
+CONTINUE2:          703F DEFINED AT LINE 89
+                    > USED AT LINE 82
+                    > USED AT LINE 119
+CHK_SI_3:           704A DEFINED AT LINE 102
+                    > USED AT LINE 105
+CONTINUE3:          705B DEFINED AT LINE 116
+                    > USED AT LINE 109
+CONTINUE4:          7070 DEFINED AT LINE 135
+                    > USED AT LINE 129
+END_TX:             7074 DEFINED AT LINE 140
+                    > USED AT LINE 38
+                    > USED AT LINE 59
+                    > USED AT LINE 87
+                    > USED AT LINE 114
+                    > USED AT LINE 133
+BEGIN_RX:           7100 DEFINED AT LINE 169
+START_RX:           7109 DEFINED AT LINE 179
+                    > USED AT LINE 172
+CHK_SI_4:           710F DEFINED AT LINE 186
+                    > USED AT LINE 189
+CONTINUE5:          7120 DEFINED AT LINE 200
+                    > USED AT LINE 193
+CHK_SI_5:           712E DEFINED AT LINE 214
+                    > USED AT LINE 217
+CONTINUE6:          713F DEFINED AT LINE 228
+                    > USED AT LINE 221
+CONTINUE7:          7143 DEFINED AT LINE 233
+                    > USED AT LINE 261
+CHK_SI_6:           7149 DEFINED AT LINE 240
+                    > USED AT LINE 243
+CONTINUE8:          715A DEFINED AT LINE 254
+                    > USED AT LINE 247
+READ_LAST_BYTE:     7161 DEFINED AT LINE 263
+                    > USED AT LINE 231
+CHK_SI_7:           7167 DEFINED AT LINE 270
+                    > USED AT LINE 273
+CONTINUE9:          7178 DEFINED AT LINE 284
+                    > USED AT LINE 277
+CONTINUE10:         718C DEFINED AT LINE 303
+                    > USED AT LINE 297
+END_RX:             7190 DEFINED AT LINE 308
+                    > USED AT LINE 176
+                    > USED AT LINE 198
+                    > USED AT LINE 226
+                    > USED AT LINE 252
+                    > USED AT LINE 282
+                    > USED AT LINE 301
+BEGIN_INIT:         7200 DEFINED AT LINE 336
+DELAY1:             7214 DEFINED AT LINE 357
+                    > USED AT LINE 359
+END_INIT:           7222 DEFINED AT LINE 371

@@ -1,0 +1,383 @@
+
+
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Driver: I2C Controller Transmitter mode
+;	For 1802 CPU - RCA 2020 SBC with PCA9564 Controller
+;	Version: 0.1
+;	Date: Oct 31, 2024
+;	Author: Richard van Harderwijk
+;
+;	PCA9564 connected via INP/OUT 4..7
+;	Doc: https://github.com/richardvanharderwijk/1802-I2C-interface-for-RCA2020 
+;	Doc: AN10148 application note, figure 6a
+;
+;	Pre: R(8) is pointer to string of bytes to send; R(7).1 is peripheral address; R(7).0 is #bytes to send
+;	Post on success: R(7).1 and R(7).0 contain 0x00
+;	Post on error: R(7).1 is Expected I2CSTA value; R(7).0 is Actual I2CSTA returned value
+;	End with SCRT return D5
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+org $7000
+
+begin_tx:
+
+GLO 7	    	; test on #bytes to send > 0
+BNZ start_tx
+LDI 0x01		
+PLO 7
+PHI 7
+BR end_tx		; exit w/ error
+
+start_tx:
+LDI 0xE4		; generate I2C start command
+STXD
+STXD
+IRX
+OUT 7	    	; I2CCON register
+
+chk_SI_1:		; wait for SI = 1
+INP 7
+ANI 0x08
+BZ chk_SI_1
+
+INP 4	    	; I2CSTA register, check
+XRI 0x08
+BZ continue1	; ok, continue
+LDX
+PLO 7
+LDI 0x08
+PHI 7
+BR end_tx		; exit w/ error
+
+continue1:
+GHI 7	    	; peripheral address to I2CDAT
+SHL			    ; Shift Left, address in MSB bits [7..1]
+ANI 0xFE		; R/W bit = 0 [LSB]
+STXD
+STXD
+IRX
+OUT 5		    ; I2CDAT register
+LDI 0xC4		; I2C send peripheral address + write command
+STXD
+STXD
+IRX
+OUT 7
+
+chk_SI_2:		; wait for SI=1
+INP 7
+ANI 0x08
+BZ chk_SI_2
+
+INP 4	    	; I2CSTA register, check
+XRI 0x18
+BZ continue2
+LDX
+PLO 7
+LDI 0x18
+PHI 7
+BR end_tx		; exit w/ error
+
+continue2:		; loop for byte string to send 
+LDA 8	    	; load data to I2CDAT
+STXD
+STXD
+IRX
+OUT 5
+
+LDI 0xC4		; send data command
+STXD
+STXD
+IRX
+OUT 7
+
+chk_SI_3:		; wait for SI = 1, poll for transmission finished
+INP 7
+ANI 0x08
+BZ chk_SI_3
+
+INP 4	    	; I2CSTA register, check
+XRI 0x28
+BZ continue3
+LDX
+PLO 7
+LDI 0x28
+PHI 7
+BR end_tx		; exit w/ error
+
+continue3:
+DEC 7	    	; more bytes to send?
+GLO 7
+BNZ continue2
+
+LDI 0xD4		; generate stop command
+STXD
+STXD
+IRX
+OUT 7
+
+INP 7	    	; I2CCON register, check STO bit = 0
+ANI 0x10
+BZ continue4
+LDI 0x02		
+PLO 7
+PHI 7
+BR end_tx		; exit w/ error
+
+continue4:
+LDI 0x00		; exit w/ success :-)
+PLO 7
+PHI 7
+
+end_tx:
+SEP 5
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Driver: I2C Controller Receiver mode
+;	For 1802 CPU - RCA 2020 SBC with PCA9564 Controller
+;	Version: 0.1
+;	Date: Oct 31, 2024
+;	Author: Richard van Harderwijk
+;
+;	PCA9564 connected via INP/OUT 4..7
+;	Doc: https://github.com/richardvanharderwijk/1802-I2C-interface-for-RCA2020 
+;	Doc: AN10148 application note, figure 7a
+;
+;	Pre: R(8) is pointer to memory allocated to store bytes received; 
+;	Pre: R(7).1 is peripheral address; R(7).0 is #bytes to receive
+;	Post on success: R(7).1 and R(7).0 contain 0x00
+;	Post on error: R(7).1 is Expected I2CSTA value; R(7).0 is Actual I2CSTA returned value
+;	End with SCRT return D5
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+org $7100
+
+begin_rx:
+
+GLO 7	    	; test on #bytes to receive > 0
+BNZ start_rx
+LDI 0x01		
+PLO 7
+PHI 7
+BR end_rx   	; exit w/ error
+
+
+start_rx:
+LDI 0xE4		; generate I2C start command
+STXD
+STXD
+IRX
+OUT 7	    	; I2CCON register
+
+chk_SI_4:		; wait for SI = 1
+INP 7
+ANI 0x08
+BZ chk_SI_4
+
+INP 4	    	; I2CSTA register, check
+XRI 0x08
+BZ continue5	; ok, continue
+LDX
+PLO 7
+LDI 0x08
+PHI 7
+BR end_rx   	; exit w/ error
+
+continue5:
+GHI 7	    	; peripheral address to I2CDAT
+SHL			    ; Shift Left, address in MSB bits [7..1]
+ORI 0x01		; R/W bit = 1 [LSB]
+STXD
+STXD
+IRX
+OUT 5	    	; I2CDAT register
+LDI 0xC4		; I2C send peripheral address + write command
+STXD
+STXD
+IRX
+OUT 7
+
+chk_SI_5:		; wait for SI=1
+INP 7
+ANI 0x08
+BZ chk_SI_5
+
+INP 4	    	; I2CSTA register, check
+XRI 0x40
+BZ continue6
+LDX
+PLO 7
+LDI 0x40
+PHI 7
+BR end_rx   	; exit w/ error
+
+continue6:
+DEC 7	    	; last byte of receive is not acknowledged
+GLO 7		    ; if only one byte to read, skip read loop
+BZ read_last_byte
+
+continue7:		; loop read all but last byte
+LDI 0xC4		; read data command
+STXD
+STXD
+IRX
+OUT 7
+
+chk_SI_6:		; wait for SI = 1, poll for transmission finished
+INP 7
+ANI 0x08
+BZ chk_SI_6
+
+INP 4	    	; I2CSTA register, check
+XRI 0x50
+BZ continue8
+LDX
+PLO 7
+LDI 0x50
+PHI 7
+BR end_rx   	; exit w/ error
+
+continue8:
+INP 5	    	; read data from I2C bus from I2CDAT
+STR 8		    ; store received I2C data via R(8) pointer
+INC 8
+
+DEC 7	    	; more bytes to receive?
+GLO 7
+BNZ continue7
+
+read_last_byte:
+LDI 0x44		; read data command
+STXD	    	; to read last byte, not acknowledged
+STXD    
+IRX
+OUT 7
+
+chk_SI_7:		; wait for SI = 1, poll for transmission finished
+INP 7
+ANI 0x08
+BZ chk_SI_7
+
+INP 4	    	; I2CSTA register, check
+XRI 0x58
+BZ continue9
+LDX
+PLO 7
+LDI 0x58
+PHI 7
+BR end_rx   	; exit w/ error
+
+continue9:
+INP 5	    	; read last byte from I2C bus from I2CDAT
+STR 8	    	; store received I2C data via R(8) pointer
+INC 8
+
+LDI 0xD4		; generate stop command
+STXD
+STXD
+IRX
+OUT 7
+
+INP 7	    	; I2CCON register, check STO bit
+ANI 0x10
+BZ continue10
+LDI 0x02		
+PLO 7
+PHI 7
+BR end_rx   	; exit w/ error
+
+continue10:
+LDI 0x00		; exit w/ success :-)
+PLO 7
+PHI 7
+
+end_rx:
+SEP 5
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;	Driver: I2C Controller Initialization Sequence
+;	For 1802 CPU - RCA 2020 SBC with PCA9564 Controller
+;	Version: 0.1
+;	Date: Oct 31, 2024
+;	Author: Richard van Harderwijk
+;
+;	PCA9564 connected via INP/OUT 4..7
+;	Doc: https://github.com/richardvanharderwijk/1802-I2C-interface-for-RCA2020 
+;	Doc: AN10148 application note, figure 5
+;
+;	Pre: R(7).1 future use (own peripheral address); R(7).0 future use (clock frequency)
+;	In this version clock frequency is set at 88 kHz
+;	Post on success: R(7).1 and R(7).0 contain 0x00
+;	Post on error: future use, in this version no test
+;	End with SCRT return D5
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+org $7200
+
+begin_init:
+
+LDI 0xFF		; 0xFF in TimeOut register
+STXD
+STXD
+IRX
+OUT 4	    	; I2CTO register
+
+LDI 0x64		; own peripheral address 
+STXD
+STXD
+IRX
+OUT 6	    	; I2CADR register
+
+LDI 0x44		; Enable Serial IO, 88 kHz
+STXD
+STXD
+IRX
+OUT 7	    	; I2CCON register
+
+LDI 0x2F		; wait for oscillator startup
+delay1:
+SMI 0x01
+BNZ delay1
+
+LDI 0xC4		; peripheral receiver mode
+STXD
+STXD
+IRX
+OUT 7	    	; I2CCON register
+
+LDI 0x00		; exit always w/ success :-)
+PLO 7
+PHI 7
+
+end_init:
+SEP 5
+
+
+
+
+
+
+
+
+
+
+
